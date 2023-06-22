@@ -1,16 +1,9 @@
 // @flow
 
-const genSecret = () =>
-  Math.random()
-    .toString()
-    .split('')
-    .slice(2)
-    .map((d) => String.fromCharCode(97 + (parseInt(d) % (122 - 97))))
-    .join('')
-// todo: make id generation unique
-const secret = genSecret()
+const secret = Symbol()
 
 export type CreationContext = {
+  jCalls: Array<any>,
   memoizedCalls: Array<Reactive<any>>,
   callIndex: 0,
   onChange: (...props: Array<any>) => any,
@@ -20,6 +13,8 @@ export type CreationContext = {
 }
 
 type RecomputeContext = {
+  jCalls: Array<any>,
+  jIndex: number,
   creations: Array<any>,
   index: number,
 }
@@ -113,6 +108,14 @@ function getCreationContext(a: Reactive<any>): CreationContext {
   return a._creationContext
 }
 
+function getRootRecomputeContext(): ?RecomputeContext {
+  return recomputeContexts[0]
+}
+
+function getNearestCreateContext(): ?CreationContext {
+  return peek(creationContexts)
+}
+
 function isPrimitive(test: any): boolean {
   return test !== Object(test)
 }
@@ -125,6 +128,18 @@ function setConstraintRecorder(value) {
 let constraintTrace
 function setConstraintTrace(value) {
   constraintTrace = value
+}
+
+function convertIntoProxies(props: {[string]: () => any}) {
+  const result = {}
+  for (const key of Object.keys(props)) {
+    const propExpression = props[key]
+    // This will evaluate the expression and cache the output value:
+    const proxy = reactive(propExpression)
+    // $FlowFixMe
+    result[key] = proxy
+  }
+  return result
 }
 
 const debounce = (func, timeout) => {
@@ -149,17 +164,25 @@ const debounce = (func, timeout) => {
 //   ...T
 // }
 export type Reactive<T> = T
-type Extra = string | {debounce: number} | {timeout: number}
+type Extra = string | {debounce: number} | {timeout: number} | Symbol
 
 function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
   const takesProps = typeof init === 'function' && init.length
   let onChange: (...props: Array<any>) => any
 
-  const factory = (...props: Array<any>) => {
+  const factory = (...args: Array<any>) => {
     const name = typeof extra === 'string' ? extra : 'Reactive'
     // console.log('name', name)
     const place = new Error(name || 'Reactive')
-    const id = genSecret()
+    const id = typeof extra === 'symbol' ? extra : Symbol()
+
+    if (!!args[0] && typeof args[0] === 'object' && !Array.isArray(args[0])) {
+      // Following React convention, the first argument should be a props object
+      // for functional components.
+      // In grainbox, properties of props are proxies.
+      // Also in grainbox, each prop should be a functional expression.
+      args[0] = convertIntoProxies(args[0])
+    }
 
     const debounceSettings = extra?.debounce ? extra : null
     const timeoutSettings = extra?.timeout || extra?.timeout === 0 ? extra : null
@@ -179,7 +202,7 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
         const proxy = parentCtx.memoizedCalls[parentCtx.callIndex]
         parentCtx.callIndex++ // This will be reset to 0 in the parent's onChange() function.
         // Check if the proxy is the same
-        onChange(...props)
+        onChange(...args)
         return proxy
       }
     }
@@ -194,13 +217,12 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
       typeof init === 'function' ? init : defaultFunction
     let state = typeof init === 'object' || init?.__isProxy ? init : defaultState
 
-    const observerRegistry = new WeakMap()
-    const dependents: Array<CreationContext> = []
+    const dependents: {[string]: CreationContext} = {}
     const creations = []
     let shouldUpdate = (prev, next) => prev !== next
     let setterLocked = false
 
-    const registerContextAsDependent = () => {
+    const register = () => {
       if (constraintRecorder) {
         return
       }
@@ -209,19 +231,8 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
         return
       }
       const createCtx = peek(creationContexts)
-      if (
-        createCtx &&
-        !observerRegistry.has(createCtx?.handle || {}) // prevent duplicate registration
-      ) {
-        // Runs when one specials obj is accessed during the creation of another specials obj.
-        // We will register the obj being created as a dependent
-        // because its state depends on the state of obj being accessed.
-
-        if (createCtx) {
-          // console.log('registerContextAsDependent', name, createCtx.name)
-          observerRegistry.set(createCtx.handle, true)
-          dependents.push(createCtx)
-        }
+      if (createCtx) {
+        dependents[createCtx.id] = createCtx
       }
     }
 
@@ -229,14 +240,22 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
     let cachedValue
     const unboxCache = () => {
       // console.log('cachedValue', cachedValue)
-      registerContextAsDependent()
+      register()
       return cachedValue
     }
 
     // For printing a reactive function:
     Object.defineProperty(unboxCache, 'name', {value: name})
 
+    let domUpdateHandled = false
+    const recomputeThis = () => {
+      domUpdateHandled = true
+      return cachedValue
+    }
+    // recomputeThis.toString = init.toString
+
     const createContext: CreationContext = {
+      jCalls: [],
       // If this is a reactive function, then whenever it runs,
       // any prop proxy calls made during its execution will
       // use the memoizedCalls array to obtain a reference to
@@ -253,32 +272,33 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
       name
     }
 
-    onChange = (...props: Array<any>) => {
-      recomputeContexts.push({ index: 0, creations })
-      const nextValue: any = recompute(...props)
+    onChange = (...args: Array<any>) => {
+      recomputeContexts.push({ index: 0, creations, jCalls: createContext.jCalls, jIndex: 0 })
+      domUpdateHandled = false
+      const nextValue: any = recompute.call(recomputeThis, ...args)
+      init.cachedValue = nextValue
       recomputeContexts.pop()
       // At the end of the recompute, any component calls made incremented the memoization, like react hooks,
       // so they need to be reset.
       createContext.callIndex = 0
       const prevValue = cachedValue // setting should not causes registrations as dependent.
       cachedValue = nextValue
-      if (
-        isEl(nextValue) &&
-        !!nextValue?.replaceWith &&
-        isEl(prevValue) &&
-        !!prevValue?.replaceWith &&
-        nextValue !== prevValue // See ref proxy
-      ) {
-        // .replaceWith is how page updates happen.
-        // If a function which returns an HTML element is passed into reactive,
-        // Then that function's return type should never change, always returning
-        // an HTML element.
-        // On recomputes, the previous value will be replaced with the new.
-        // In cases where the function returns HTML, it is called a builder.
-        prevValue.replaceWith(nextValue)
+      // todo: there is no need to do DOM operations in this file.
+      //  instead, jyperscript handles it.
+      // if (
+      //   !domUpdateHandled &&
+      //   isEl(nextValue) &&
+      //   !!nextValue?.replaceWith &&
+      //   isEl(prevValue) &&
+      //   !!prevValue?.replaceWith &&
+      //   nextValue !== prevValue // See ref proxy
+      // ) {
+      //   prevValue.replaceWith(nextValue)
+      // }
 
-        // Reactive builders do not propagate their reactivity.
-        // Instead, the DOM is the final destination of reactivity.
+      if (isEl(prevValue) || isEl(nextValue)) {
+        // Reactive elements do not propagate update signal.
+        //
         return nextValue
       }
 
@@ -300,7 +320,9 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
     createContext.onChange = onChange
 
     creationContexts.push(createContext)
-    cachedValue = recompute() // todo the first time this runs, it needs to record any reactive creations.
+    recomputeThis.isInit = true
+    cachedValue = recompute.call(recomputeThis, ...args) // todo the first time this runs, it needs to record any reactive creations.
+    recomputeThis.isInit = false
     creationContexts.pop()
 
     function updateDependents() {
@@ -314,36 +336,34 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
       // If another data source wants to call the same ctx.onChange(),
       // then it would see that it has already been queued.
 
-      // console.log('dependents', dependents)
-      // todo
-      //   disallow setting within an observer.
-      //   eventually allow setting within an observer.
-      // console.log('dependents', dependents)
-      for (const ctx of dependents) {
-        // Whenever there is a change, notify dependents.
-        // Updates to a ctx are batched.
-        if (!queuedUpdates[ctx.id]) {
-          queuedUpdates[ctx.id] = true
-          queueMicrotask(() => {
-            delete queuedUpdates[ctx.id]
+      // Calls to updateDependents so that things are updates in breadth first order.
+      if (!queuedUpdates[ctx.id]) { // batch updates
+        queuedUpdates[ctx.id] = true
+        queueMicrotask(() => {
+          delete queuedUpdates[ctx.id]
+
+          // Within this microtask, update all dependents:
+          for (const ctx of Object.values(dependents)) {
             if (finishedRecomputes[ctx.id]) {
+              // A series of microtasks is prevented from updating the
+              // same context twice.
               console.error('Loop', place)
               return
             }
-            ctx.onChange()
+            ctx.onChange() // this might queue another update microtask
             finishedRecomputes[ctx.id] = true
-          })
-          // A microtask to clean up should always be the last to run.
-          queueMicrotask(() => {
-            if (Object.keys(queuedUpdates).length) {
-              // another microtask has been queued,
-              // so since this isn't the last
-              // do not run.
-              return
-            }
-            finishedRecomputes = {}
-          })
-        }
+          }
+
+          // Last thing to run is clean up:
+          if (Object.keys(queuedUpdates).length) {
+            // another microtask is queued after this one,
+            // defer cleanup to that one.
+            return
+          }
+          // Reset loop detection before next task.
+          // This happens after all microtasks have ran.
+          finishedRecomputes = {}
+        })
       }
     }
 
@@ -422,7 +442,7 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
           prop !== '__isResolved' &&
           prop !== '__isNullProxy'
         ) {
-          registerContextAsDependent()
+          register()
         }
 
         if (prop === secret) {
@@ -557,7 +577,7 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
 
           if (init.__isBeam) {
             // init is a beam proxy
-            registerContextAsDependent()
+            register()
             if (!init.__isResolved) {
               // value is a beam proxy, unboxed once.
               // In general a beam proxy should never be exposed.
@@ -591,6 +611,18 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
                 }
               } else if (specialArgs?.noRegister) {
                 return cachedValue
+              } else if (specialArgs?.onResolve) {
+                reactive(() => {
+                  // todo: These rules would be useful here:
+                  //  unresolved proxy unboxes to null
+                  //  null proxy unboxes to null
+                  proxy()
+                  if (!this() && proxy.__isResolved) {
+                    specialArgs?.onResolve()
+                    // todo: delete this reaction
+                  }
+                  return proxy.__isResolved
+                })
               }
             }
             return
@@ -612,7 +644,7 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
         }
         if (init.__isBeam) {
           // init is a beam proxy
-          registerContextAsDependent()
+          register()
           // unbox:
           return init()
         }
@@ -656,7 +688,7 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
       // of a createContext, i.e. inside of a reactive function who is passing in props.
       const createCtx = peek(creationContexts)
       if (createCtx) {
-        registerContextAsDependent()
+        register()
         createCtx.memoizedCalls.push(proxy)
       }
     }
@@ -683,5 +715,7 @@ export {
   getDependents,
   getCreationContext,
   setConstraintRecorder,
-  setConstraintTrace
+  setConstraintTrace,
+  getRootRecomputeContext,
+  getNearestCreateContext
 }

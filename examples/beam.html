@@ -1,0 +1,19 @@
+<script type="module">
+  import { reactive as r, html, ref, beam } from 'https://esm.run/grainbox'
+
+  const server = beam({ serverUrl: 'http://localhost:4000/graphql' })
+  const textField = ref()
+
+  const App = r(() => html`
+    <div>
+      <input ref=${textField} type='text'/>
+      ${server.data.search().map((word) => (html`<span>${word}</span>`))}
+    </div>
+  `)
+
+  r(() => {
+    server.data.search({ for: textField.value })
+  }, { debounce: 500 })
+
+  document.body.appendChild(App())
+</script>

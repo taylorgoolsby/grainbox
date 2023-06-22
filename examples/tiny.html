@@ -1,0 +1,19 @@
+<script type='module'>
+  // import { reactive as r, html } from 'https://esm.run/grainbox';
+  import { reactive as r, html } from '../dist/cdn/index.mjs';
+  import css from 'https://esm.sh/csz';
+
+  const className = css`
+    background-color: red;
+  `
+
+  const count = r(0);
+
+  const App = r(() => html`
+    <button class=${className} onClick=${() => count(count() + 1)}>
+      ${`Count: ${count()}`}
+    </button>
+  `);
+
+  document.body.appendChild(App())
+</script>
