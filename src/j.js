@@ -1,5 +1,8 @@
-
-import {reactive as r, getNearestCreateContext, getRootRecomputeContext} from './reactive.mjs'
+import {
+  reactive as r,
+  getNearestCreateContext,
+  getRootRecomputeContext,
+} from './reactive.mjs'
 
 // todo:
 // If you have:
@@ -81,8 +84,6 @@ Like childExpressions, it is for context.
   }
 * */
 
-
-
 const j = (tagName, _propExpressions, childExpressions) => {
   const nearestCreateContext = getNearestCreateContext()
   const rootRecomputeContext = getRootRecomputeContext()
@@ -95,13 +96,10 @@ const j = (tagName, _propExpressions, childExpressions) => {
     const jObj = rootRecomputeContext.jCalls[rootRecomputeContext.jIndex]
     rootRecomputeContext.jIndex++
 
-
     jObj.returnedElement.children
 
     return
   } // otherwise we are in create context, so continue building brand new HTML and reactive structures:
-
-
 
   // todo: props may be an object or a proxy.
   //  Unbox it it is a proxy.
@@ -116,14 +114,20 @@ const j = (tagName, _propExpressions, childExpressions) => {
   const hasRefProxy = ref?.__isRef && ref?.__isResolved
   if (hasRefProxy) {
     // update existing element in place instead of creating a new one.
-    e = ref(() => ({noRegister: true}))()
+    e = ref(() => ({ noRegister: true }))()
     return e
   }
 
   let e
 
-  const connectedCallbacks = [propExpressions['onconnected'], propExpressions['onmount']].filter(a => !!a)
-  const disconnectedCallbacks = [propExpressions['ondisconnected'], propExpressions['onunmount']].filter(a => !!a)
+  const connectedCallbacks = [
+    propExpressions['onconnected'],
+    propExpressions['onmount'],
+  ].filter((a) => !!a)
+  const disconnectedCallbacks = [
+    propExpressions['ondisconnected'],
+    propExpressions['onunmount'],
+  ].filter((a) => !!a)
   const hasLifecycle = connectedCallbacks.length || disconnectedCallbacks.length
   if (hasLifecycle) {
     // customElements.get(tagName) returns undefined if tagName is not custom.
@@ -188,7 +192,7 @@ const j = (tagName, _propExpressions, childExpressions) => {
           //  These should be removed to avoid memory leaks.
         }
         // unbox the ref proxy which is wrapped by the reactive proxy:
-        const ref = value(() => ({noRegister: true}))
+        const ref = value(() => ({ noRegister: true }))
         ref(e, g)
       } else if (typeof value === 'function') {
         value(e)
@@ -215,8 +219,10 @@ const j = (tagName, _propExpressions, childExpressions) => {
               //   color: () => (predicate() ? 'red': 'blue'),
               //   fontSize: '1em'
               // }}
-              const style = typeof styleObj[k] === 'function' ? styleObj[k]() : styleObj[k]
-              if (exists(style)) { // todo: is empty string allowed?
+              const style =
+                typeof styleObj[k] === 'function' ? styleObj[k]() : styleObj[k]
+              if (exists(style)) {
+                // todo: is empty string allowed?
                 const match = style.match(/(.*)\W+!important\W*$/)
                 if (match) {
                   e.style.setProperty(k, match[1], 'important')
@@ -239,7 +245,8 @@ const j = (tagName, _propExpressions, childExpressions) => {
         const attrsObj = expression()
         for (let k in attrsObj) {
           r(() => {
-            const attr = typeof attrsObj[k] === 'function' ? attrsObj[k]() : attrsObj[k]
+            const attr =
+              typeof attrsObj[k] === 'function' ? attrsObj[k]() : attrsObj[k]
             if (exists(attr)) {
               e.setAttribute(k, attr) // setting empty string is allowed.
             } else {
@@ -273,7 +280,8 @@ const j = (tagName, _propExpressions, childExpressions) => {
       } else if (/^on\w+/.test(key)) {
         r(function () {
           const u = expression()
-          if (this()) { // this() is the previous value, aka cachedValue.
+          if (this()) {
+            // this() is the previous value, aka cachedValue.
             e.removeEventListener(key.substring(2).toLowerCase(), this(), false)
           }
           e.addEventListener(key.substring(2).toLowerCase(), u, false)
@@ -311,14 +319,13 @@ const j = (tagName, _propExpressions, childExpressions) => {
     // which we are currently in.
     const expression = propExpressions[key]
     const proxy = r(expression)
-    const value = proxy(() => ({noRegister: true}))
+    const value = proxy(() => ({ noRegister: true }))
     // Note that this r() call might perform unboxing operations.
     // This causes any reactive dependencies to hold a reference to the new proxy.
     // So this is a bit of a waste.
     // Any time the reactive dependency changes, it will recompute this proxy
     // but then the cachedValue isn't used for anything.
     // Todo: Is there another way to get the cachedValue without waste?
-
 
     if (value?.__isNullProxy) {
       // Consider:
@@ -329,9 +336,11 @@ const j = (tagName, _propExpressions, childExpressions) => {
 
       // When it resolves, it connects.
       // Only the ref proxy connects while unresolved.
-      value(() => ({onResolve: () => {
-        connect(key, expression, value)
-      }}))
+      value(() => ({
+        onResolve: () => {
+          connect(key, expression, value)
+        },
+      }))
     } else {
       connect(key, expression, value)
     }
@@ -355,9 +364,76 @@ const j = (tagName, _propExpressions, childExpressions) => {
     // }
   }
 
+  function getNonNullPreviousSibling(i) {
+    for (let n = i - 1; n > -1; n--) {
+      const sibling = childExpressions[n]
+      if (isNode(sibling.cachedValue)) {
+        return sibling
+      }
+      if (n === 0) {
+        // found none
+        return null
+      }
+    }
+  }
+
+  function updateDOM(ctx, i, prevValue, v) {
+    // The value needs to be placed into the DOM.
+    if (!prevValue && v !== null) {
+      // initialization or
+      // a conditional, like <span>{i ? '' : null}</span>
+      let childElement = isNode(v) ? v : document.createTextNode(v)
+
+      if (ctx.isInit) {
+        // on init, these are appended in order.
+        e.append(childElement)
+      } else {
+        // Find a non-null prior sibling by iterating over siblings
+        // starting from the current index and decrementing,
+        // checking each sibling function's cachedValue
+        // until one is found to be non-null.
+        // Note: sibling.cachedValue is a possible thing you can do
+        // because after reactive recomputes, the return value is attached
+        // to the function's .cachedValue prop.
+        // This is a way to get a function's last computed value without
+        // having a reference to the proxy and without registering
+        // reactive listeners.
+        // Todo: look into emptying text nodes instead of removing them. Might be faster.
+        const sibling = getNonNullPreviousSibling(i)
+        if (sibling) {
+          sibling.after(childElement)
+        } else {
+          e.prepend(childElement)
+        }
+      }
+
+      return childElement
+    }
+
+    // If the value changes due to recompute, then the DOM needs to change.
+    if (prevValue && isNode(v)) {
+      // v is probably an expression evaluating to a functional component
+      // a conditional, like <span>{i ? <Comp1/> : <Comp2/>}</span>
+      prevValue.replaceWith(v)
+      return v // v is a node
+    } else if (prevValue && v !== null) {
+      // otherwise, v is cast to a string
+      // a conditional, like <span>{i ? <Comp1/> : ''}</span>
+      // prevValue is a textNode.
+      prevValue.textContent = v // todo: try to set v to weird values, like a function
+      return prevValue // prevValue is a text node.
+    } else if (prevValue && v === null) {
+      // a conditional, like <span>{i ? '' : null}</span>
+      prevValue.remove()
+      return null
+    } else {
+      return null // fallback when !prevValue && !v
+    }
+  }
+
   for (let i = 0; i < childExpressions.length; i++) {
     // Each child should be a function.
-    r(function ()/*: HTMLElement | null*/ {
+    r(function () /*: HTMLElement | null*/ {
       // Each child potentially uses reactive variables
       // so, this function recomputes due to changes in child.
       let v = childExpressions[i]()
@@ -365,11 +441,6 @@ const j = (tagName, _propExpressions, childExpressions) => {
       // if (typeof v === 'function') {
       //   v = v()
       // }
-
-      // if (v.__isProxy) {
-      //   v = v()
-      // }
-
 
       // If child is an unresolved async proxy or a null proxy,
       // then it is treated like an empty string.
@@ -379,65 +450,137 @@ const j = (tagName, _propExpressions, childExpressions) => {
         v = ''
       }
 
+      if (v.__isProxy) {
+        v = v()
+      }
+
+      if (Array.isArray(v)) {
+        v = v.map(item => {
+          isNode(item) ? item : document.createTextNode(item)
+        })
+      }
+
       // Usage of this requires that the function handles DOM updating itself:
-      const prevValue/*: HTMLElement | null */ = this() ?? null
+      const prevValue /*: Node | Array<Node> | null */ = this() ?? null
 
-      // The value needs to be placed into the DOM.
-      if (!prevValue && v !== null) {
-        // initialization or
-        // a conditional, like <span>{i ? '' : null}</span>
-        const childElement = isNode(v) ? v : document.createTextNode(v)
-
-        if (this.isInit) {
-          // on init, these are appended in order.
-          e.append(childElement)
+      // The idea here is to handle expressions that evaluate to arrays by
+      // pretending each item is an independent child expression.
+      // There is a difference however between real child expressions
+      // and arrays. The number of child expressions cannot change if JSX
+      // declarations are deterministic.
+      // However, the number of items in an array can change.
+      // One way to solve this is to use pv.remove() for each item in
+      // the prevValueAsArray.
+      // Then we are free to call e.append() for each item in
+      // the nextValueAsArray.
+      // However, this means array updates are slow.
+      // Suppose the only difference between the prev and next arrays were
+      // just a .push(), .pop(), .shift(), or .unshift().
+      // The fine-grained thing to do would be to append or remove just the
+      // tail or head, leaving all other elements in the interior of the array
+      // alone.
+      // TODO: Speed up array changes for .push(), .pop(), .shift(), or .unshift()
+      //  by setting up special traps just for these operations which will
+      //  call the appropriate fine-grained update.
+      //  The same technique can also be used for array insertions.
+      const isPrevArray = Array.isArray(prevValue)
+      const isNextArray = Array.isArray(v)
+      if (isPrevArray || isNextArray) {
+        if (isPrevArray) {
+          for (const pv of prevValue) {
+            pv.remove()
+          }
         } else {
-          // Find a non-null prior sibling by iterating over siblings
-          // starting from the current index and decrementing,
-          // checking each sibling function's cachedValue
-          // until one is found to be non-null.
-          // Note: sibling.cachedValue is a possible thing you can do
-          // because after reactive recomputes, the return value is attached
-          // to the function's .cachedValue prop.
-          // This is a way to get a function's last computed value without
-          // having a reference to the proxy and without registering
-          // reactive listeners.
-          // Todo: look into emptying text nodes instead of removing them. Might be faster.
-          for (let n = i - 1; n > -1; n--) {
-            const sibling = childExpressions[n]
-            if (isNode(sibling.cachedValue)) {
-              sibling.after(childElement)
-              break
-            }
-            if (n === 0) {
-              // found none
-              e.prepend(childElement)
+          prevValue.remove()
+        }
+        let sibling = getNonNullPreviousSibling(i)
+        if (isNextArray) {
+          // todo: All elements in v should be nodes.
+          for (const nv of v) {
+            if (v !== null) {
+              if (!sibling) {
+                e.append(nv)
+              } else {
+                sibling.after(nv)
+              }
+              // The added node is the new non-null previous sibling:
+              sibling = nv
             }
           }
+        } else {
+          if (sibling) {
+            sibling.after(v)
+          } else {
+            e.append(v)
+          }
         }
-
-        return childElement
-      }
-
-      // If the value changes due to recompute, then the DOM needs to change.
-      if (prevValue && isNode(v)) {
-        // v is probably an expression evaluating to a functional component
-        // a conditional, like <span>{i ? <Comp1/> : <Comp2/>}</span>
-        prevValue.replaceWith(v)
-        return v // v is a node
-      } else if (prevValue && v !== null) {
-        // otherwise, v is cast to a string
-        // a conditional, like <span>{i ? <Comp1/> : ''}</span>
-        // prevValue is a textNode.
-        prevValue.textContent = v // todo: try to set v to weird values, like a function
-        return prevValue // prevValue is a text node.
-      } else if (prevValue && v === null) {
-        // a conditional, like <span>{i ? '' : null}</span>
-        prevValue.remove()
-        return null
+        return v
       } else {
-        return null // fallback when !prevValue && !v
+        updateDOM(this, i, prevValue, v)
       }
+      // for (let j = 0; j < nextValueAsArray.length; j++) {
+      //   const nv = nextValueAsArray[i]
+      //   const pv = prevValueAsArray[i] ?? null
+      //
+      //   updateDOM(this, i, pv, nv)
+      // }
+
+      // // The value needs to be placed into the DOM.
+      // if (!prevValue && v !== null) {
+      //   // initialization or
+      //   // a conditional, like <span>{i ? '' : null}</span>
+      //   let childElement = isNode(v) ? v : document.createTextNode(v)
+      //
+      //   if (this.isInit) {
+      //     // on init, these are appended in order.
+      //     e.append(childElement)
+      //   } else {
+      //     // Find a non-null prior sibling by iterating over siblings
+      //     // starting from the current index and decrementing,
+      //     // checking each sibling function's cachedValue
+      //     // until one is found to be non-null.
+      //     // Note: sibling.cachedValue is a possible thing you can do
+      //     // because after reactive recomputes, the return value is attached
+      //     // to the function's .cachedValue prop.
+      //     // This is a way to get a function's last computed value without
+      //     // having a reference to the proxy and without registering
+      //     // reactive listeners.
+      //     // Todo: look into emptying text nodes instead of removing them. Might be faster.
+      //     for (let n = i - 1; n > -1; n--) {
+      //       const sibling = childExpressions[n]
+      //       if (isNode(sibling.cachedValue)) {
+      //         sibling.after(childElement)
+      //         break
+      //       }
+      //       if (n === 0) {
+      //         // found none
+      //         e.prepend(childElement)
+      //       }
+      //     }
+      //   }
+      //
+      //   return childElement
+      // }
+      //
+      // // If the value changes due to recompute, then the DOM needs to change.
+      // if (prevValue && isNode(v)) {
+      //   // v is probably an expression evaluating to a functional component
+      //   // a conditional, like <span>{i ? <Comp1/> : <Comp2/>}</span>
+      //   prevValue.replaceWith(v)
+      //   return v // v is a node
+      // } else if (prevValue && v !== null) {
+      //   // otherwise, v is cast to a string
+      //   // a conditional, like <span>{i ? <Comp1/> : ''}</span>
+      //   // prevValue is a textNode.
+      //   prevValue.textContent = v // todo: try to set v to weird values, like a function
+      //   return prevValue // prevValue is a text node.
+      // } else if (prevValue && v === null) {
+      //   // a conditional, like <span>{i ? '' : null}</span>
+      //   prevValue.remove()
+      //   return null
+      // } else {
+      //   return null // fallback when !prevValue && !v
+      // }
 
       // Background info on why this function uses `this()`:
       // Inside reactive's implementation, when this function is ran due to
