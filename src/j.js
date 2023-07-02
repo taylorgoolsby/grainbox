@@ -2,7 +2,7 @@ import {
   reactive as r,
   getNearestCreateContext,
   getRootRecomputeContext,
-} from './reactive.mjs'
+} from './reactive.js'
 
 // todo:
 // If you have:
@@ -84,22 +84,22 @@ Like childExpressions, it is for context.
   }
 * */
 
-const j = (tagName, _propExpressions, childExpressions) => {
-  const nearestCreateContext = getNearestCreateContext()
-  const rootRecomputeContext = getRootRecomputeContext()
+export const j = (tagName, _propExpressions, childExpressions) => {
+  // const nearestCreateContext = getNearestCreateContext()
+  // const rootRecomputeContext = getRootRecomputeContext()
 
-  if (rootRecomputeContext) {
-    // In this case, the j() call is being made due to a recompute:
-    // either props have changed,
-    // or a reactive variable was unboxed outside of a JSX child expression.
-
-    const jObj = rootRecomputeContext.jCalls[rootRecomputeContext.jIndex]
-    rootRecomputeContext.jIndex++
-
-    jObj.returnedElement.children
-
-    return
-  } // otherwise we are in create context, so continue building brand new HTML and reactive structures:
+  // if (rootRecomputeContext) {
+  //   // In this case, the j() call is being made due to a recompute:
+  //   // either props have changed,
+  //   // or a reactive variable was unboxed outside of a JSX child expression.
+  //
+  //   const jObj = rootRecomputeContext.jCalls[rootRecomputeContext.jIndex]
+  //   rootRecomputeContext.jIndex++
+  //
+  //   jObj.returnedElement.children
+  //
+  //   return
+  // } // otherwise we are in create context, so continue building brand new HTML and reactive structures:
 
   // todo: props may be an object or a proxy.
   //  Unbox it it is a proxy.
@@ -366,9 +366,10 @@ const j = (tagName, _propExpressions, childExpressions) => {
 
   function getNonNullPreviousSibling(i) {
     for (let n = i - 1; n > -1; n--) {
-      const sibling = childExpressions[n]
-      if (isNode(sibling.cachedValue)) {
-        return sibling
+      const sibling = childReactions[n]
+      const cachedValue = sibling(() => ({noRegister: true}))
+      if (isNode(cachedValue)) {
+        return cachedValue
       }
       if (n === 0) {
         // found none
@@ -431,9 +432,11 @@ const j = (tagName, _propExpressions, childExpressions) => {
     }
   }
 
+  const childReactions = []
+
   for (let i = 0; i < childExpressions.length; i++) {
     // Each child should be a function.
-    r(function () /*: HTMLElement | null*/ {
+    childReactions.push(r(function () /*: HTMLElement | null*/ {
       // Each child potentially uses reactive variables
       // so, this function recomputes due to changes in child.
       let v = childExpressions[i]()
@@ -450,7 +453,7 @@ const j = (tagName, _propExpressions, childExpressions) => {
         v = ''
       }
 
-      if (v.__isProxy) {
+      if (v?.__isProxy) {
         v = v()
       }
 
@@ -516,7 +519,7 @@ const j = (tagName, _propExpressions, childExpressions) => {
         }
         return v
       } else {
-        updateDOM(this, i, prevValue, v)
+        return updateDOM(this, i, prevValue, v)
       }
       // for (let j = 0; j < nextValueAsArray.length; j++) {
       //   const nv = nextValueAsArray[i]
@@ -620,13 +623,15 @@ const j = (tagName, _propExpressions, childExpressions) => {
       //
       // To use `this()`, the reactive function being wrapped must be
       // declared using the function keyword, not an array function.
-    })
+    }, 'child updater'))
   }
 
   // Any time a j() call is made, it is registered to the nearest create context.
-  if (nearestCreateContext) {
-    nearestCreateContext.jCalls.push()
-  }
+  // if (nearestCreateContext) {
+  //   nearestCreateContext.jCalls.push()
+  // }
+
+  return e
 }
 
 export default j

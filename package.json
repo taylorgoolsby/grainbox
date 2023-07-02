@@ -27,44 +27,48 @@
   "type": "module",
   "exports": {
     ".": {
-      "node": "./dist/esm/index.mjs",
-      "default": "./dist/cdn/index.mjs"
+      "node": "./dist/esm/index.js",
+      "default": "./dist/cdn/index.js"
     },
     "./reactive": {
-      "node": "./dist/esm/reactive.mjs",
-      "default": "./dist/cdn/reactive.mjs"
+      "node": "./dist/esm/reactive.js",
+      "default": "./dist/cdn/reactive.js"
     },
     "./history": {
-      "node": "./dist/esm/history.mjs",
-      "default": "./dist/cdn/history.mjs"
+      "node": "./dist/esm/history.js",
+      "default": "./dist/cdn/history.js"
     },
     "./routing": {
-      "node": "./dist/esm/routing.mjs",
-      "default": "./dist/cdn/routing.mjs"
+      "node": "./dist/esm/routing.js",
+      "default": "./dist/cdn/routing.js"
     },
     "./hyperscript": {
-      "node": "./dist/esm/grainbox-hyperscript.mjs",
-      "default": "./dist/cdn/grainbox-hyperscript.mjs"
+      "node": "./dist/esm/grainbox-hyperscript.js",
+      "default": "./dist/cdn/grainbox-hyperscript.js"
     },
-    "./hyperscript.mjs": {
-      "node": "./dist/esm/grainbox-hyperscript.mjs",
-      "default": "./dist/cdn/grainbox-hyperscript.mjs"
+    "./hyperscript.js": {
+      "node": "./dist/esm/grainbox-hyperscript.js",
+      "default": "./dist/cdn/grainbox-hyperscript.js"
     },
     "./html-tag": {
-      "node": "./dist/esm/html-tag.mjs",
-      "default": "./dist/cdn/html-tag.mjs"
+      "node": "./dist/esm/html-tag.js",
+      "default": "./dist/cdn/html-tag.js"
     },
     "./*": {
-      "node": "./dist/esm/*.mjs",
-      "default": "./dist/cdn/*.mjs"
+      "node": "./dist/esm/*.js",
+      "default": "./dist/cdn/*.js"
+    },
+    "./*.js": {
+      "node": "./dist/esm/*.js",
+      "default": "./dist/cdn/*.js"
     },
     "./*.mjs": {
-      "node": "./dist/esm/*.mjs",
-      "default": "./dist/cdn/*.mjs"
+      "node": "./dist/esm/*.js",
+      "default": "./dist/cdn/*.js"
     }
   },
-  "unpkg": "./dist/cdn/index.mjs",
-  "main": "./dist/esm/index.mjs",
+  "unpkg": "./dist/cdn/index.js",
+  "main": "./dist/esm/index.js",
   "files": [
     "./docs",
     "./dist",
@@ -75,15 +79,21 @@
     "build": "rm -rf dist && mkdir dist && flow-remove-types src --out-dir dist/esm && flow-copy-source src dist/esm && npm run build-cdn && prettier --write dist",
     "build-cdn": "cp -r dist/esm dist/cdn && rm dist/cdn/*.flow && node scripts/copy-node-modules.js && web-imports --glob 'dist/cdn/*.{js,mjs}' --prefix './node_modules/'",
     "prepublishOnly": "npm run build",
-    "readme": "git add . && git commit -m 'readme' && npm version patch && git push && npm publish"
+    "readme": "git add . && git commit -m 'readme' && npm version patch && git push && npm publish",
+    "test": "npm run build && tape tests/**/*.test.js | tap-pretty",
+    "test-r": "npm run build && tape tests/reactive.test.js | tap-pretty"
   },
   "devDependencies": {
     "flow-bin": "0.195.1",
     "flow-copy-source": "^2.0.9",
     "flow-remove-types": "^2.197.0",
     "fs-extra": "^11.1.0",
+    "jsdom": "^22.1.0",
     "prettier": "^2.8.1",
     "rebuild-aio": "^1.1.9",
+    "sinon": "^15.2.0",
+    "tap-pretty": "taylrun/tap-pretty",
+    "tape": "^5.6.3",
     "web-imports": "3.1.13"
   },
   "dependencies": {

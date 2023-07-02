@@ -1,5 +1,5 @@
 import _htm from 'htm'
-import _hyperscript from './grainbox-hyperscript.mjs'
+import _hyperscript from './grainbox-hyperscript.js'
 
 function h(name, props, ...children) {
   if (typeof name === 'function') {

@@ -1,8 +1,8 @@
 // @flow
 
 import { parse as regexparam } from 'regexparam'
-import { history } from './history.mjs'
-import { reactive } from './reactive.mjs'
+import { history } from './history.js'
+import { reactive } from './reactive.js'
 
 export type Page = HTMLElement
 

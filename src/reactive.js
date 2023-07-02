@@ -9,7 +9,7 @@ export type CreationContext = {
   onChange: (...props: Array<any>) => any,
   registerCreation: (reactiveObj: Reactive<any>) => any,
   handle: () => any,
-  id: string,
+  id: Symbol,
 }
 
 type RecomputeContext = {
@@ -21,8 +21,8 @@ type RecomputeContext = {
 
 let creationContexts: Array<CreationContext> = []
 let recomputeContexts: Array<RecomputeContext> = []
-let finishedRecomputes = {}
-let queuedUpdates = {}
+let finishedRecomputes: {[string]: boolean} = {}
+let queuedUpdates: {[string]: boolean} = {}
 
 function isEl(obj) {
   const canUseDOM = !!(
@@ -131,6 +131,33 @@ function setConstraintTrace(value) {
 }
 
 function convertIntoProxies(props: {[string]: () => any}) {
+  /*
+  Note that j() (the replacement for hyperscript)
+  converts props in jsx into functional expressions.
+
+  For example:
+    <span className=""/>
+  Converts into:
+    j('span', {className: () => ("")}, [])
+
+  So usually, if most people are using JSX, we would expect
+  `props[key]` in this convertIntoProxies function to be a propExpression.
+  However, it is possible for people to manually pass props into
+  a functional component AKA a factory function.
+  If someone manually passes in a value besides a function in,
+  then `propExpressions` here is a misnomer.
+  Instead of creating a reactive function, we would be creating a
+  reactive variable.
+  In both cases, though, they are still both just reactive proxies.
+  This means that inside of the functional component's implementation,
+  since the developer should be expecting all props to be proxies,
+  the developer still has control over when to unbox the proxy.
+
+  Keep in mind, the reason why all props need to be proxies is because
+  we want to control when a prop is used in order to build reactions
+  around them when they are unboxed.
+  This allows us to make fine-grained DOM updates.
+  * */
   const result = {}
   for (const key of Object.keys(props)) {
     const propExpression = props[key]
@@ -171,9 +198,15 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
   let onChange: (...props: Array<any>) => any
 
   const factory = (...args: Array<any>) => {
-    const name = typeof extra === 'string' ? extra : 'Reactive'
+    const name = typeof extra === 'string' ? extra : (() => {
+      if (typeof init === 'function') {
+        return 'reactive function'
+      } else {
+        return 'reactive variable'
+      }
+    })()
     // console.log('name', name)
-    const place = new Error(name || 'Reactive')
+    const place = new Error(name || 'reactive proxy')
     const id = typeof extra === 'symbol' ? extra : Symbol()
 
     if (!!args[0] && typeof args[0] === 'object' && !Array.isArray(args[0])) {
@@ -217,7 +250,7 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
       typeof init === 'function' ? init : defaultFunction
     let state = typeof init === 'object' || init?.__isProxy ? init : defaultState
 
-    const dependents: {[string]: CreationContext} = {}
+    const dependents: {[Symbol]: CreationContext} = {}
     const creations = []
     let shouldUpdate = (prev, next) => prev !== next
     let setterLocked = false
@@ -337,13 +370,15 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
       // then it would see that it has already been queued.
 
       // Calls to updateDependents so that things are updates in breadth first order.
-      if (!queuedUpdates[ctx.id]) { // batch updates
-        queuedUpdates[ctx.id] = true
+      if (!queuedUpdates[createContext.id]) { // batch updates
+        queuedUpdates[createContext.id] = true
         queueMicrotask(() => {
-          delete queuedUpdates[ctx.id]
+          delete queuedUpdates[createContext.id]
 
           // Within this microtask, update all dependents:
-          for (const ctx of Object.values(dependents)) {
+          // $FlowFixMe
+          const arr = Object.getOwnPropertySymbols(dependents).map(k => dependents[k])
+          for (const ctx of Object.values(arr)) {
             if (finishedRecomputes[ctx.id]) {
               // A series of microtasks is prevented from updating the
               // same context twice.
@@ -465,6 +500,13 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
             } else {
               return cachedValue
             }
+          }
+        }
+        if (prop === 'name') {
+          if (state?.hasOwnProperty('name')) {
+            return state?.['name']
+          } else {
+            return unboxCache.name
           }
         }
         if (prop === '_setShouldUpdate') {
