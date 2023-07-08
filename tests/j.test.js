@@ -50,7 +50,7 @@ test('reactive textContent: change existing value', async (t) => {
   t.equal(el.textContent, 'hi', 'textContent initialized')
 
   message('HI!')
-  await Promise.resolve()
+  await updates()
   t.equal(el.textContent, 'HI!', 'textContent changed')
   // When the innerHTML of a node is just a string, and a string change occurs,
   // the new value is set using `textContent = newValue`, so there is no need to
@@ -71,7 +71,7 @@ test('reactive textContent: add value from empty', async (t) => {
   t.equal(el.textContent, '', 'textContent initialized')
 
   message('HI!')
-  await Promise.resolve()
+  await updates()
   t.equal(el.textContent, 'HI!', 'textContent changed')
   // See: reactive textContent: change existing value
   t.equal(document.createTextNode.callCount, 1, 'document.createTextNode call count')
@@ -89,7 +89,7 @@ test('reactive textContent: remove value', async (t) => {
   t.equal(el.textContent, 'hi', 'textContent initialized')
 
   message('')
-  await Promise.resolve()
+  await updates()
   t.equal(el.textContent, '', 'textContent changed')
   t.equal(document.createTextNode.callCount, 1, 'document.createTextNode call count')
 
@@ -112,7 +112,7 @@ test('reactive innerHTML: add child', async (t) => {
 
   sinon.spy(el)
   show(true)
-  await Promise.resolve()
+  await updates()
   t.equal(el.innerHTML, '<span></span>', 'innerHTML changed')
   t.equal(el.prepend.callCount, 1, 'el.prepend was called')
 
@@ -136,7 +136,7 @@ test('reactive innerHTML: remove child', async (t) => {
   sinon.spy(child)
 
   show(false)
-  await Promise.resolve()
+  await updates()
   t.equal(el.innerHTML, '', 'innerHTML changed')
   t.equal(child.remove.callCount, 1, '.remove was called')
 
@@ -160,7 +160,7 @@ test('reactive innerHTML: change child', async (t) => {
   sinon.spy(child)
 
   show(true)
-  await Promise.resolve()
+  await updates()
   t.equal(el.innerHTML, '<span></span>', 'innerHTML changed')
   t.equal(child.replaceWith.callCount, 1, '.replaceWith was called')
 
@@ -191,7 +191,7 @@ test('reactive innerHTML: multiple children', async (t) => {
   sinon.spy(el)
 
   show1(true)
-  await Promise.resolve()
+  await updates()
   t.equal(el.innerHTML, '<span></span>', 'innerHTML changed')
   t.equal(el.prepend.callCount, 1, 'root.prepend was called')
 
@@ -199,22 +199,22 @@ test('reactive innerHTML: multiple children', async (t) => {
   sinon.spy(child1)
 
   show3(true)
-  await Promise.resolve()
+  await updates()
   t.equal(el.innerHTML, '<span></span><table></table>', 'innerHTML changed')
   t.equal(child1.after.callCount, 1, 'child1.after was called')
 
   show2(true)
-  await Promise.resolve()
+  await updates()
   t.equal(el.innerHTML, '<span></span><div></div><table></table>', 'innerHTML changed')
   t.equal(child1.after.callCount, 2, 'child1.after was called')
 
   show1(false)
-  await Promise.resolve()
+  await updates()
   t.equal(el.innerHTML, '<div></div><table></table>', 'innerHTML changed')
   t.equal(child1.remove.callCount, 1, 'child1.remove was called')
 
   show1(true)
-  await Promise.resolve()
+  await updates()
   t.equal(el.innerHTML, '<span></span><div></div><table></table>', 'innerHTML changed')
   t.equal(el.prepend.callCount, 2, 'root.prepend was called')
 

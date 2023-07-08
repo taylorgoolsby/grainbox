@@ -1,6 +1,6 @@
 
 import test from 'boxtape'
-import {reactive as r} from '../dist/esm/index.js'
+import {reactive as r, updates} from '../dist/esm/index.js'
 
 test('reactive variable: create and unbox', async (t) => {
   const count = r(0)
@@ -31,7 +31,7 @@ test('reactive function: change', async (t) => {
   // Since dependents are updated using microtasks,
   // await is needed to cause the current task to end
   // and resume execution after the microtasks have completed.
-  await Promise.resolve()
+  await updates()
 
   t.equal(double(), 4, 'unbox')
 })
@@ -45,7 +45,7 @@ test('update dependents using microtasks', async (t) => {
   count(2)
   t.equal(double(), 2, 'unbox')
   t.equal(triple(), 3, 'unbox')
-  await Promise.resolve()
+  await updates()
   t.equal(double(), 4, 'unbox')
   t.equal(triple(), 6, 'unbox')
 })
@@ -106,7 +106,7 @@ test('reactive component: prop value instead of prop expression', async (t) => {
 //   t.equal(doubleAdd(), 3, 'unbox')
 //
 //   count(2)
-//   await Promise.resolve()
+//   await updates()
 //   t.equal(doubleAdd(), 5, 'unbox')
 //
 //   // Since noRegister was used to get check's value,
@@ -114,7 +114,7 @@ test('reactive component: prop value instead of prop expression', async (t) => {
 //   // so changing check's value should not cause
 //   // a recompute of doubleAdd.
 //   check(2)
-//   await Promise.resolve()
+//   await updates()
 //   t.equal(doubleAdd(), 5, 'unbox')
 //
 //   // todo: there might be a need to manually cause doubleAdd to recompute.
