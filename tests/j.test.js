@@ -1,7 +1,7 @@
-import test from './betterTest.js'
+import test from 'boxtape'
 import sinon from 'sinon'
 import {JSDOM} from 'jsdom'
-import {j, reactive as r} from '../dist/esm/index.js'
+import {j, reactive as r, updates} from '../dist/esm/index.js'
 
 const dom = new JSDOM()
 global.document = dom.window.document
@@ -9,7 +9,7 @@ global.window = dom.window
 
 sinon.spy(document)
 
-test.beforeEach(() => {
+test.beforeEach((t) => {
   for (const method in document) {
     if (typeof document[method] === 'function') {
       if (document[method].callCount !== undefined) {
@@ -17,6 +17,10 @@ test.beforeEach(() => {
       }
     }
   }
+  for (const node of document.body.childNodes) {
+    node.remove()
+  }
+  t.equal(dom.serialize(), '<html><head></head><body></body></html>', 'dom cleaned')
 })
 
 test('div', (t) => {
@@ -215,4 +219,52 @@ test('reactive innerHTML: multiple children', async (t) => {
   t.equal(el.prepend.callCount, 2, 'root.prepend was called')
 
   t.end()
+})
+
+test('functional components: fine-grained updates through components', async (t) => {
+  /*
+  const Text = r((props) => (
+    <span color={props?.color() ?? 'red'}>{props.children()}</span>
+  ))
+
+  const Row = r((props) => (
+    <div>
+      <Text>{props.value()}</Text>
+    </div>
+  ))
+
+  const predicate = r(false)
+  const Page = r(() => (
+    <div>
+      <Row value={predicate() ? 'low' : 'high'}/>
+    </div>
+  ))
+  * */
+
+  const Text = r((props) => (
+    j('span', null, [() => (props.children())])
+  ), 'r-text')
+
+  const Row = r((props) => (
+    j('div', null, [
+      () => (Text({children: () => (props.value())}))
+    ])
+  ), 'r-row')
+
+  const predicate = r(false, 'r-predicate')
+  const Page = r(() => (
+    j('div', null, [
+      () => (Row({value: () => (predicate() ? 'high' : 'low')}))
+    ])
+  ), 'r-page')
+
+  document.body.append(Page())
+
+  t.equal(dom.serialize(), '<html><head></head><body><div><div><span>low</span></div></div></body></html>', 'html before')
+
+  predicate(true)
+  await updates()
+
+  t.equal(dom.serialize(), '<html><head></head><body><div><div><span>high</span></div></div></body></html>', 'html after')
+
 })

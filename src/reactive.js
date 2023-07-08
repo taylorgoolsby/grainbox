@@ -162,7 +162,7 @@ function convertIntoProxies(props: {[string]: () => any}) {
   for (const key of Object.keys(props)) {
     const propExpression = props[key]
     // This will evaluate the expression and cache the output value:
-    const proxy = reactive(propExpression)
+    const proxy = reactive(propExpression, `prop-wrapper-${propExpression.name || ''}`)
     // $FlowFixMe
     result[key] = proxy
   }
@@ -205,7 +205,6 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
         return 'reactive variable'
       }
     })()
-    // console.log('name', name)
     const place = new Error(name || 'reactive proxy')
     const id = typeof extra === 'symbol' ? extra : Symbol()
 
@@ -272,7 +271,6 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
     // Register any observables used inside a computable.
     let cachedValue
     const unboxCache = () => {
-      // console.log('cachedValue', cachedValue)
       register()
       return cachedValue
     }
@@ -390,7 +388,7 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
           }
 
           // Last thing to run is clean up:
-          if (Object.keys(queuedUpdates).length) {
+          if (Object.getOwnPropertySymbols(queuedUpdates).length) {
             // another microtask is queued after this one,
             // defer cleanup to that one.
             return
@@ -749,6 +747,18 @@ function reactive<T>(init: T, extra?: ?Extra): Reactive<T> | () => Reactive<T> {
   }
 }
 
+async function updates(): Promise<void> {
+  // An await statement queues the code that comes after it in a microtask,
+  // so await Promise.resolve() does not wait for all updates to finish
+  // because updating is process which involves queuing multiple microtasks.
+  // In order to wait for all updates, use await updates().
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve()
+    })
+  })
+}
+
 export {
   reactive,
   isReactive,
@@ -759,5 +769,6 @@ export {
   setConstraintRecorder,
   setConstraintTrace,
   getRootRecomputeContext,
-  getNearestCreateContext
+  getNearestCreateContext,
+  updates
 }

@@ -80,10 +80,12 @@
     "build-cdn": "cp -r dist/esm dist/cdn && rm dist/cdn/*.flow && node scripts/copy-node-modules.js && web-imports --glob 'dist/cdn/*.{js,mjs}' --prefix './node_modules/'",
     "prepublishOnly": "npm run build",
     "readme": "git add . && git commit -m 'readme' && npm version patch && git push && npm publish",
-    "test": "npm run build && tape tests/**/*.test.js | tap-pretty",
-    "test-r": "npm run build && tape tests/reactive.test.js | tap-pretty"
+    "test": "npm run build && boxtape tests/**/*.test.js",
+    "test-j": "npm run build && boxtape tests/j.test.js",
+    "test-r": "boxtape tests/reactive.test.js"
   },
   "devDependencies": {
+    "boxtape": "^0.0.13",
     "flow-bin": "0.195.1",
     "flow-copy-source": "^2.0.9",
     "flow-remove-types": "^2.197.0",
@@ -92,8 +94,6 @@
     "prettier": "^2.8.1",
     "rebuild-aio": "^1.1.9",
     "sinon": "^15.2.0",
-    "tap-pretty": "taylrun/tap-pretty",
-    "tape": "^5.6.3",
     "web-imports": "3.1.13"
   },
   "dependencies": {

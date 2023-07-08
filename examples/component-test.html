@@ -1,0 +1,32 @@
+<script type='module'>
+  import {reactive as r, j} from '../dist/cdn/index.js'
+
+  const Text = r((props) => (
+    j('span', null, [() => (props.children())])
+  ))
+
+  const Row = r((props) => (
+    j('div', null, [
+      () => (Text({children: () => (props.value())}))
+    ])
+  ))
+
+  const predicate = r(false)
+  const Page = r(() => (
+    j('div', null, [
+      () => (Row({value: () => (predicate() ? 'high' : 'low')}))
+    ])
+  ))
+
+  document.body.append(Page())
+
+  console.log('****************** Page().childNodes[0].childNodes[0].childNodes', Page().childNodes[0].childNodes[0].childNodes[0].textContent)
+
+  predicate(true)
+
+  await Promise.resolve()
+
+  console.log('****************** Page().childNodes[0].childNodes[0].childNodes', Page().childNodes[0].childNodes[0].childNodes[0].textContent)
+
+
+</script>

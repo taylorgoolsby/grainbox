@@ -8,7 +8,7 @@ import {
 // If you have:
 /*
   r(() => {
-    console.log(JSON.stringify(unbox()))
+    console.debug(JSON.stringify(unbox()))
   })
 * */
 // This makes sense because in order to stringify, it should be

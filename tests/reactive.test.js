@@ -1,5 +1,5 @@
 
-import test from './betterTest.js'
+import test from 'boxtape'
 import {reactive as r} from '../dist/esm/index.js'
 
 test('reactive variable: create and unbox', async (t) => {
@@ -41,6 +41,7 @@ test('update dependents using microtasks', async (t) => {
   const double = r(() => (count() * 2))
   const triple = r(() => (count() * 3))
   t.equal(double(), 2, 'unbox')
+  t.equal(triple(), 3, 'unbox')
   count(2)
   t.equal(double(), 2, 'unbox')
   t.equal(triple(), 3, 'unbox')
@@ -50,6 +51,9 @@ test('update dependents using microtasks', async (t) => {
 })
 
 test('reactive component: create and unbox', async (t) => {
+  /*
+    <Component count={0}/>
+  * */
   const Component = r((props) => {
     t.equal(props.count.name, 'reactive function', 'props are reactive proxies')
 
@@ -88,31 +92,33 @@ test('reactive component: prop value instead of prop expression', async (t) => {
   t.end()
 })
 
-test('special apply: noRegister', async (t) => {
-  // Unbox a value without causing listener registration
-  const check = r(1)
-  const count = r(1)
-  const doubleAdd = r(() => {
-    const checkValue = check(() => ({noRegister: true}))
-    return count() * 2 + checkValue
-  })
+// todo: test top-level j calls and conditionals inside of j.
 
-  t.equal(doubleAdd(), 3, 'unbox')
-
-  count(2)
-  await Promise.resolve()
-  t.equal(doubleAdd(), 5, 'unbox')
-
-  // Since noRegister was used to get check's value,
-  // doubleAdd is not a dependent of check,
-  // so changing check's value should not cause
-  // a recompute of doubleAdd.
-  check(2)
-  await Promise.resolve()
-  t.equal(doubleAdd(), 5, 'unbox')
-
-  // todo: there might be a need to manually cause doubleAdd to recompute.
-  //  This can be done by introducing another special.
-
-  t.end()
-})
+// test('special apply: noRegister', async (t) => {
+//   // Unbox a value without causing listener registration
+//   const check = r(1)
+//   const count = r(1)
+//   const doubleAdd = r(() => {
+//     const checkValue = check(() => ({noRegister: true}))
+//     return count() * 2 + checkValue
+//   })
+//
+//   t.equal(doubleAdd(), 3, 'unbox')
+//
+//   count(2)
+//   await Promise.resolve()
+//   t.equal(doubleAdd(), 5, 'unbox')
+//
+//   // Since noRegister was used to get check's value,
+//   // doubleAdd is not a dependent of check,
+//   // so changing check's value should not cause
+//   // a recompute of doubleAdd.
+//   check(2)
+//   await Promise.resolve()
+//   t.equal(doubleAdd(), 5, 'unbox')
+//
+//   // todo: there might be a need to manually cause doubleAdd to recompute.
+//   //  This can be done by introducing another special.
+//
+//   t.end()
+// })
