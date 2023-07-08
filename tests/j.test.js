@@ -241,9 +241,9 @@ test('functional components: fine-grained updates through components', async (t)
   ))
   * */
 
-  const Text = r((props) => (
+  const Text = sinon.spy(r((props) => (
     j('span', null, [() => (props.children())])
-  ), 'r-text')
+  ), 'r-text'))
 
   const Row = r((props) => (
     j('div', null, [
@@ -267,4 +267,6 @@ test('functional components: fine-grained updates through components', async (t)
 
   t.equal(dom.serialize(), '<html><head></head><body><div><div><span>high</span></div></div></body></html>', 'html after')
 
+  t.equal(Text.callCount, 1, 'update does not re-render Text')
 })
+
